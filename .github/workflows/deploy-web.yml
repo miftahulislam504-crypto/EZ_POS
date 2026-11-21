@@ -41,7 +41,6 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: "3.35.x"
           cache: true
 
       # ENV_JSON secret থাকলে সেটা, না থাকলে SUPABASE_URL + SUPABASE_ANON_KEY থেকে env.json
