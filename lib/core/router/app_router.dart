@@ -8,18 +8,35 @@ import '../../features/customers/customer_form_page.dart';
 import '../../features/customers/customers_page.dart';
 import '../../features/dashboard/dashboard_page.dart';
 import '../../features/expenses/expenses_page.dart';
+import '../../features/cash/accounts_page.dart';
+import '../../features/cash/cash_page.dart';
+import '../../features/cash/day_closing_page.dart';
+import '../../features/installments/installment_report_page.dart';
+import '../../features/installments/installments_page.dart';
+import '../../features/installments/plan_detail_page.dart';
+import '../../features/installments/reminders_page.dart';
 import '../../features/inventory/inventory_page.dart';
+import '../../features/inventory/serial_lookup_page.dart';
+import '../../features/inventory/stock_count_page.dart';
+import '../../features/inventory/transfer_detail_page.dart';
+import '../../features/inventory/transfer_form_page.dart';
+import '../../features/inventory/transfers_page.dart';
 import '../../features/pos/pos_page.dart';
 import '../../features/products/barcode_labels_page.dart';
 import '../../features/products/catalog_page.dart';
 import '../../features/products/product_form_page.dart';
 import '../../features/purchases/purchase_detail_page.dart';
 import '../../features/purchases/purchase_form_page.dart';
+import '../../features/purchases/purchase_return_page.dart';
 import '../../features/reports/reports_page.dart';
+import '../../features/sales/exchange_page.dart';
 import '../../features/sales/sale_detail_page.dart';
 import '../../features/sales/sale_return_page.dart';
+import '../../features/settings/branches_page.dart';
 import '../../features/settings/business_settings_pages.dart';
+import '../../features/settings/installment_settings_page.dart';
 import '../../features/settings/more_page.dart';
+import '../../features/settings/printer_settings_page.dart';
 import '../../features/settings/settings_page.dart';
 import '../../features/settings/team_pages.dart';
 import '../../features/shell/app_shell.dart';
@@ -44,10 +61,15 @@ bool _allowed(String path, AppUser u) {
   bool starts(String p) => path == p || path.startsWith('$p/');
   if (starts('/settings/team') || starts('/settings/roles')) return u.can(Perm.usersManage);
   if (starts('/settings/catalog')) return u.can(Perm.productsManage);
-  if (starts('/settings/business') || starts('/settings/sales') || starts('/settings/receipt') || starts('/settings/payment-methods')) {
+  if (starts('/settings/installments') || starts('/settings/branches')) return u.can(Perm.settingsManage);
+  if (starts('/settings/business') || starts('/settings/sales') || starts('/settings/receipt') || starts('/settings/payment-methods') || starts('/settings/product-rules')) {
     return u.can(Perm.settingsManage);
   }
   if (starts('/pos')) return u.can(Perm.salesCreate);
+  if (starts('/installments')) return u.can(Perm.installmentsView);
+  if (starts('/cash')) return u.canAny([Perm.cashView, Perm.accountsView]);
+  if (starts('/inventory/transfers')) return u.can(Perm.transfersView);
+  if (starts('/inventory/counts')) return u.can(Perm.inventoryCount);
   if (starts('/dashboard')) return u.can(Perm.dashboardView);
   if (starts('/reports')) return u.can(Perm.reportsView);
   if (starts('/expenses')) return u.can(Perm.expensesView);
@@ -128,6 +150,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           tab('/pos', const PosPage()),
           tab('/transactions', const TransactionsPage()),
           tab('/inventory', const InventoryPage()),
+          tab('/installments', const InstallmentsPage()),
+          tab('/cash', const CashPage()),
           tab('/more', const MorePage()),
           tab('/customers', const CustomersPage()),
           tab('/suppliers', const SuppliersPage()),
@@ -139,10 +163,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       full('/settings/business', (_) => const BusinessProfilePage()),
       full('/settings/sales', (_) => const SalesSettingsPage()),
       full('/settings/receipt', (_) => const ReceiptSettingsPage()),
+      full('/settings/product-rules', (_) => const ProductRulesPage()),
+      full('/settings/printer', (_) => const PrinterSettingsPage()),
       full('/settings/payment-methods', (_) => const PaymentMethodsPage()),
       full('/settings/catalog', (_) => const CatalogPage()),
       full('/settings/team', (_) => const TeamPage()),
       full('/settings/roles', (_) => const RolesPage()),
+      full('/settings/installments', (_) => const InstallmentSettingsPage()),
+      full('/settings/branches', (_) => const BranchesPage()),
+      full('/installments/reminders', (_) => const RemindersPage()),
+      full('/installments/report', (_) => const InstallmentReportPage()),
+      full('/installments/:id', (s) => PlanDetailPage(planId: s.pathParameters['id']!)),
+      full('/inventory/transfers', (_) => const TransfersPage()),
+      full('/inventory/transfers/new', (_) => const TransferFormPage()),
+      full('/inventory/transfers/:id', (s) => TransferDetailPage(transferId: s.pathParameters['id']!)),
+      full('/inventory/counts', (_) => const StockCountsPage()),
+      full('/inventory/counts/new', (_) => const StockCountPage()),
+      full('/inventory/counts/:id', (s) => StockCountPage(countId: s.pathParameters['id'])),
+      full('/inventory/serials', (s) => SerialLookupPage(initial: s.uri.queryParameters['q'])),
+      full('/inventory/expiry', (_) => const ExpiryPage()),
+      full('/cash/day-closing', (_) => const DayClosingPage()),
+      full('/cash/accounts', (_) => const AccountsPage()),
+      full('/cash/accounts/:id', (s) => AccountStatementPage(accountId: s.pathParameters['id']!)),
+      full('/purchases/:id/return', (s) => PurchaseReturnPage(purchaseId: s.pathParameters['id']!)),
+      full('/sales/:id/exchange', (s) => ExchangePage(saleId: s.pathParameters['id']!)),
       full('/products/new', (_) => const ProductFormPage()),
       full('/products/labels', (s) => BarcodeLabelsPage(initialProductId: s.uri.queryParameters['product'])),
       full('/products/:id/edit', (s) => ProductFormPage(productId: s.pathParameters['id'])),

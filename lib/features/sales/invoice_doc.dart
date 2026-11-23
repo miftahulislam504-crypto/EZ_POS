@@ -39,3 +39,37 @@ PrintableDoc invoiceDoc(SaleDetail d) {
     qrData: r.invoiceNo,
   );
 }
+
+/// Refund receipt (money went back) or return receipt (credit or due reduced only).
+PrintableDoc returnReceiptDoc(ReturnReceipt r) {
+  return PrintableDoc(
+    title: r.refund > 0.004 ? 'Refund receipt' : 'Return receipt',
+    number: r.returnNo,
+    date: r.date,
+    partyLabel: 'Customer',
+    partyName: r.customerName,
+    partyPhone: r.customerPhone,
+    meta: [
+      ('Invoice', r.invoiceNo),
+      if (r.refundAccount != null && r.refund > 0.004) ('Refund via', r.refundAccount!),
+    ],
+    lines: [
+      for (final i in r.lines)
+        PrintLine(
+          name: i.name,
+          qty: Fmt.qty(i.qty),
+          price: i.qty <= 0 ? i.amount : i.amount / i.qty,
+          total: i.amount,
+          sub: i.condition == 'resellable' ? null : (i.condition == 'damaged' ? 'Damaged' : 'Needs inspection'),
+        ),
+    ],
+    totals: [
+      ('Return value', Fmt.pdfMoney(r.total), true),
+      if (r.dueAdjusted > 0.004) ('Taken off the invoice due', Fmt.pdfMoney(r.dueAdjusted), false),
+      if (r.refund > 0.004) ('Refunded', Fmt.pdfMoney(r.refund), true),
+      if (r.credit > 0.004) ('Kept as customer credit', Fmt.pdfMoney(r.credit), false),
+    ],
+    note: r.reason,
+    qrData: r.returnNo,
+  );
+}

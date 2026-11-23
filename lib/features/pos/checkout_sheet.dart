@@ -17,14 +17,27 @@ import '../../core/widgets/buttons.dart';
 import '../../core/widgets/inputs.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
+import '../installments/installment_setup_sheet.dart';
+import '../installments/installments_data.dart';
 import '../sales/invoice_doc.dart';
 import '../sales/sales_data.dart';
 import 'customer_picker.dart';
 import 'pos_controller.dart';
 
 class SaleResult {
-  const SaleResult({required this.id, required this.invoiceNo, required this.total, required this.paid, required this.due, required this.change});
+  const SaleResult({
+    required this.id,
+    required this.invoiceNo,
+    required this.total,
+    required this.paid,
+    required this.due,
+    required this.change,
+    this.planId,
+    this.planNo,
+  });
 
+  final String? planId;
+  final String? planNo;
   final String id;
   final String invoiceNo;
   final double total;
@@ -61,6 +74,8 @@ class _CheckoutFormState extends ConsumerState<_CheckoutForm> {
   final String _clientRef = const Uuid().v4();
   bool _saving = false;
   String? _error;
+  bool _installment = false;
+  InstallmentSetup? _setup;
 
   @override
   void dispose() {
@@ -108,7 +123,20 @@ class _CheckoutFormState extends ConsumerState<_CheckoutForm> {
       setState(() => _error = 'A non-cash payment is more than the amount left to pay.');
       return;
     }
-    if (dueC > 0) {
+    if (_installment) {
+      if (cart.customer == null) {
+        setState(() => _error = 'Select a customer for an installment sale.');
+        return;
+      }
+      if (dueC <= 0) {
+        setState(() => _error = 'The down payment covers the full amount. Switch back to Pay now.');
+        return;
+      }
+      if (_setup == null) {
+        setState(() => _error = 'Set up the installment plan first.');
+        return;
+      }
+    } else if (dueC > 0) {
       if (cart.customer == null) {
         setState(() => _error = 'Select a customer to sell the remaining ${Fmt.money(Cents.toDouble(dueC))} on credit.');
         return;
@@ -123,7 +151,13 @@ class _CheckoutFormState extends ConsumerState<_CheckoutForm> {
       _saving = true;
     });
     try {
-      final res = await ref.read(salesRepoProvider).create(cart.toPayload(payments: calc.payments, clientRef: _clientRef));
+      final payload = cart.toPayload(payments: calc.payments, clientRef: _clientRef);
+      final Map<String, dynamic> res;
+      if (_installment) {
+        res = await ref.read(installmentsRepoProvider).createSale({...payload, 'installment': _setup!.toPayload()});
+      } else {
+        res = await ref.read(salesRepoProvider).create(payload);
+      }
       ref.read(cartProvider.notifier).clear();
       refreshAfterTransaction(ref);
       if (mounted) {
@@ -134,8 +168,10 @@ class _CheckoutFormState extends ConsumerState<_CheckoutForm> {
             invoiceNo: res['invoice_no'] as String,
             total: (res['total'] as num).toDouble(),
             paid: (res['paid'] as num).toDouble(),
-            due: (res['due'] as num).toDouble(),
+            due: ((_installment ? res['total_payable'] : res['due']) as num).toDouble(),
             change: Cents.toDouble(calc.change),
+            planId: res['plan_id'] as String?,
+            planNo: res['plan_no'] as String?,
           ),
         );
       }
@@ -200,8 +236,31 @@ class _CheckoutFormState extends ConsumerState<_CheckoutForm> {
             ],
           ),
         ),
+        if (ref.watch(currentUserProvider).can(Perm.installmentsCreate)) ...[
+          const SizedBox(height: 14),
+          SegmentedButton<bool>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: false, label: Text('Pay now'), icon: Icon(Icons.payments_outlined)),
+              ButtonSegment(value: true, label: Text('Installment'), icon: Icon(Icons.event_repeat_rounded)),
+            ],
+            selected: {_installment},
+            onSelectionChanged: (v) => setState(() {
+              _installment = v.first;
+              _error = null;
+              if (_installment) {
+                // start the down payment from zero so the cashier types what the customer actually pays
+                for (final l in _lines) {
+                  l.controller.text = '';
+                }
+              } else {
+                _setup = null;
+              }
+            }),
+          ),
+        ],
         const SizedBox(height: 18),
-        Text('Payment', style: context.text.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        Text(_installment ? 'Down payment' : 'Payment', style: context.text.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 10),
         for (var i = 0; i < _lines.length; i++)
           Padding(
@@ -254,6 +313,7 @@ class _CheckoutFormState extends ConsumerState<_CheckoutForm> {
                   setState(() => _lines.add(_PayLine(a.id, remaining > 0 ? Cents.toDouble(remaining).toStringAsFixed(2) : '')));
                 },
               ),
+            if (!_installment)
             ActionChip(
               avatar: const Icon(Icons.schedule_rounded, size: 16),
               label: const Text('Pay later (credit)'),
@@ -269,7 +329,37 @@ class _CheckoutFormState extends ConsumerState<_CheckoutForm> {
         InfoRow('Paid now', Fmt.money(Cents.toDouble(calc.applied))),
         if (calc.change > 0) InfoRow('Change to return', Fmt.money(Cents.toDouble(calc.change)), bold: true, valueColor: c.success),
         if (dueC > 0)
-          InfoRow('Due (credit)', Fmt.money(Cents.toDouble(dueC)), bold: true, valueColor: c.danger),
+          InfoRow(_installment ? 'To finance' : 'Due (credit)', Fmt.money(Cents.toDouble(dueC)), bold: true, valueColor: c.danger),
+        if (_installment && dueC > 0) ...[
+          const SizedBox(height: 10),
+          AppCard(
+            onTap: () async {
+              final r = await InstallmentSetupSheet.show(context, financed: Cents.toDouble(dueC), initial: _setup);
+              if (r != null) setState(() => _setup = r);
+            },
+            child: Row(
+              children: [
+                const IconBadge(Icons.event_repeat_rounded, tone: Tone.brand),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_setup == null ? 'Set up installment plan' : 'Installment plan', style: const TextStyle(fontWeight: FontWeight.w800)),
+                      Text(
+                        _setup == null
+                            ? 'Number, dates, service charge and guarantors'
+                            : '${_setup!.custom?.length ?? _setup!.count} x ${kFrequencyLabels[_setup!.frequency]}  |  total ${Fmt.money(_setup!.totalPayable(Cents.toDouble(dueC)))}',
+                        style: context.text.bodySmall?.copyWith(color: c.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: c.textMuted),
+              ],
+            ),
+          ),
+        ],
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
@@ -281,7 +371,7 @@ class _CheckoutFormState extends ConsumerState<_CheckoutForm> {
           ),
         const SizedBox(height: 20),
         AppButton(
-          dueC > 0 ? 'Complete sale (${Fmt.money(Cents.toDouble(dueC))} due)' : 'Complete sale',
+          _installment ? 'Complete installment sale' : (dueC > 0 ? 'Complete sale (${Fmt.money(Cents.toDouble(dueC))} due)' : 'Complete sale'),
           icon: Icons.check_rounded,
           expand: true,
           loading: _saving,
@@ -354,7 +444,8 @@ class _SaleSuccessDialogState extends ConsumerState<_SaleSuccessDialog> {
             MoneyText(r.total, style: context.text.headlineMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.6)),
             const SizedBox(height: 10),
             if (r.change > 0) StatusPill('Return change ${Fmt.money(r.change)}', tone: Tone.success),
-            if (r.due > 0.004) StatusPill('Due ${Fmt.money(r.due)}', tone: Tone.danger),
+            if (r.planNo != null) StatusPill('Plan ${r.planNo}  |  payable ${Fmt.money(r.due)}', tone: Tone.brand)
+            else if (r.due > 0.004) StatusPill('Due ${Fmt.money(r.due)}', tone: Tone.danger),
           ],
         ),
       ),
@@ -366,6 +457,11 @@ class _SaleSuccessDialogState extends ConsumerState<_SaleSuccessDialog> {
             onPressed: _detail == null ? null : () => _run((d, b) => PdfBuilder.printDoc(invoiceDoc(d), b))),
         AppButton('Share', icon: Icons.ios_share_rounded, kind: ButtonKind.secondary, dense: true,
             onPressed: _detail == null ? null : () => _run((d, b) => PdfBuilder.shareDoc(invoiceDoc(d), b))),
+        if (r.planId != null)
+          AppButton('View plan', icon: Icons.event_repeat_rounded, kind: ButtonKind.secondary, dense: true, onPressed: () {
+            Navigator.pop(context);
+            GoRouter.of(context).push('/installments/${r.planId}');
+          }),
         AppButton('View', icon: Icons.receipt_long_outlined, kind: ButtonKind.secondary, dense: true, onPressed: () {
           Navigator.pop(context);
           GoRouter.of(context).push('/sales/${r.id}');

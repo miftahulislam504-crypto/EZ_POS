@@ -68,9 +68,12 @@ class SettingsPage extends ConsumerWidget {
           if (user.can(Perm.settingsManage)) ...[
             const SectionHeader('Business'),
             tile(Icons.storefront_outlined, 'Business profile', 'Name, logo, address and contact', () => context.push('/settings/business')),
-            tile(Icons.tune_rounded, 'Sales and stock rules', 'Invoice numbering, credit sales, negative stock', () => context.push('/settings/sales')),
+            tile(Icons.tune_rounded, 'Sales and stock rules', 'Invoice numbering, credit sales, return period, security', () => context.push('/settings/sales')),
             tile(Icons.print_outlined, 'Receipt and printer', 'Paper size, footer message and terms', () => context.push('/settings/receipt')),
+            tile(Icons.qr_code_2_rounded, 'SKU and barcode rules', 'Product code prefix, number length and barcode prefix', () => context.push('/settings/product-rules'), tone: Tone.info),
             tile(Icons.account_balance_wallet_outlined, 'Payment methods', 'Cash, bKash, Nagad, bank and card accounts', () => context.push('/settings/payment-methods')),
+            tile(Icons.event_repeat_rounded, 'Installments', 'Defaults, reminders and agreement terms', () => context.push('/settings/installments'), tone: Tone.brand),
+            tile(Icons.store_mall_directory_outlined, 'Branches and counters', 'Branches, warehouses and cash counters', () => context.push('/settings/branches'), tone: Tone.info),
           ],
           if (user.can(Perm.productsManage))
             tile(Icons.category_outlined, 'Catalog setup', 'Categories, brands and units', () => context.push('/settings/catalog'), tone: Tone.info),
@@ -79,6 +82,8 @@ class SettingsPage extends ConsumerWidget {
             tile(Icons.groups_outlined, 'Team members', 'Add staff and manage access', () => context.push('/settings/team'), tone: Tone.warning),
             tile(Icons.admin_panel_settings_outlined, 'Roles and permissions', 'Choose what each role can do', () => context.push('/settings/roles'), tone: Tone.warning),
           ],
+          const SectionHeader('This device'),
+          tile(Icons.print_outlined, 'Printer on this device', 'Print receipts straight to a Bluetooth, USB or network thermal printer', () => context.push('/settings/printer'), tone: Tone.info),
           const SectionHeader('Appearance'),
           AppCard(
             padding: const EdgeInsets.all(14),

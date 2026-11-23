@@ -16,6 +16,9 @@ class MorePage extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final c = context.colors;
     final items = <(IconData, String, String, String, bool, Tone)>[
+      (Icons.event_repeat_rounded, 'Installments', 'Plans, collection and reminders', '/installments', user.can(Perm.installmentsView), Tone.brand),
+      (Icons.account_balance_wallet_outlined, 'Cash register', 'Shifts, day closing and accounts', '/cash', user.can(Perm.cashView), Tone.success),
+      (Icons.swap_horiz_rounded, 'Stock transfers', 'Move stock between locations', '/inventory/transfers', user.can(Perm.transfersView), Tone.info),
       (Icons.people_alt_outlined, 'Customers', 'Profiles, dues and payments', '/customers', user.can(Perm.customersView), Tone.brand),
       (Icons.local_shipping_outlined, 'Suppliers', 'Payables and purchases', '/suppliers', user.can(Perm.suppliersView), Tone.info),
       (Icons.receipt_long_outlined, 'Expenses', 'Rent, bills, salaries', '/expenses', user.can(Perm.expensesView), Tone.warning),

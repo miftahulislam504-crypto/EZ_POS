@@ -26,6 +26,8 @@ final _destinations = <_Dest>[
   _Dest('Transactions', Icons.receipt_long_outlined, Icons.receipt_long_rounded, '/transactions',
       (u) => u.canAny([Perm.salesView, Perm.purchasesView, Perm.customersView, Perm.suppliersView]), mobile: true),
   _Dest('Inventory', Icons.inventory_2_outlined, Icons.inventory_2_rounded, '/inventory', (u) => u.canAny([Perm.productsView, Perm.inventoryView]), mobile: true),
+  _Dest('Installments', Icons.event_repeat_outlined, Icons.event_repeat_rounded, '/installments', (u) => u.can(Perm.installmentsView)),
+  _Dest('Cash', Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, '/cash', (u) => u.can(Perm.cashView)),
   _Dest('Customers', Icons.people_alt_outlined, Icons.people_alt_rounded, '/customers', (u) => u.can(Perm.customersView)),
   _Dest('Suppliers', Icons.local_shipping_outlined, Icons.local_shipping_rounded, '/suppliers', (u) => u.can(Perm.suppliersView)),
   _Dest('Expenses', Icons.payments_outlined, Icons.payments_rounded, '/expenses', (u) => u.can(Perm.expensesView)),

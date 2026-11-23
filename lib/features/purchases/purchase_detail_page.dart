@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/data/providers.dart';
 import '../../core/models/app_user.dart';
 import '../../core/printing/pdf_builder.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format.dart';
+import '../../core/utils/json.dart';
+import '../../core/widgets/attachments_section.dart';
 import '../../core/widgets/buttons.dart';
 import '../../core/widgets/feedback.dart';
 import '../../core/widgets/layout.dart';
@@ -65,6 +68,7 @@ class PurchaseDetailPage extends ConsumerWidget {
         onRetry: () => ref.invalidate(purchaseDetailProvider),
         builder: (d) {
           final r = d.row;
+          final returns = ref.watch(purchaseReturnsProvider(purchaseId)).valueOrNull ?? const <Map<String, dynamic>>[];
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
             children: [
@@ -135,6 +139,37 @@ class PurchaseDetailPage extends ConsumerWidget {
                 const SizedBox(height: 14),
                 const SectionHeader('Payments at purchase'),
                 AppCard(child: Column(children: [for (final p in d.payments) InfoRow(p.account, Fmt.money(p.amount))])),
+              ],
+              if (returns.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                const SectionHeader('Returns to supplier'),
+                AppCard(
+                  child: Column(
+                    children: [
+                      for (final x in returns)
+                        InfoRow(
+                          '${x['return_no']}  |  ${Fmt.date(parseDate(x['return_date']))}',
+                          Fmt.money(dbl(x['total'])),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              AttachmentsSection(
+                entityType: 'purchase',
+                entityId: r.id,
+                title: 'Bills and attachments',
+                subtitle: 'Supplier challan, bill or payment slip',
+                canEdit: user.can(Perm.purchasesCreate),
+                canDelete: user.can(Perm.purchasesCreate),
+              ),
+              if (user.can(Perm.purchasesReturn)) ...[
+                const SizedBox(height: 14),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: AppButton('Return to supplier', icon: Icons.undo_rounded, kind: ButtonKind.secondary, onPressed: () => context.push('/purchases/$purchaseId/return')),
+                ),
               ],
               if (r.due > 0.004 && r.supplierId != null && user.can(Perm.suppliersPayment)) ...[
                 const SizedBox(height: 20),

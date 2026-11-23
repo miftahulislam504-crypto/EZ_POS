@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/data/providers.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/json.dart';
 
 class StockRow {
@@ -132,6 +133,9 @@ class InventoryRepository {
     required String kind,
     required double quantity,
     String? note,
+    List<String>? serials,
+    String? batchNo,
+    DateTime? expiry,
   }) async {
     await _client.rpc('adjust_stock', params: {
       'p_product': productId,
@@ -139,6 +143,9 @@ class InventoryRepository {
       'p_qty': quantity,
       'p_kind': kind,
       'p_note': note,
+      'p_serials': serials,
+      'p_batch_no': batchNo,
+      'p_expiry': expiry == null ? null : Fmt.iso(expiry),
     });
   }
 }

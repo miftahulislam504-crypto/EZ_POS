@@ -27,6 +27,23 @@ class Perm {
   static const reportsView = 'reports.view';
   static const settingsManage = 'settings.manage';
   static const usersManage = 'users.manage';
+  static const installmentsView = 'installments.view';
+  static const installmentsCreate = 'installments.create';
+  static const installmentsCollect = 'installments.collect';
+  static const installmentsReschedule = 'installments.reschedule';
+  static const installmentsManage = 'installments.manage';
+  static const transfersView = 'transfers.view';
+  static const transfersManage = 'transfers.manage';
+  static const purchasesReturn = 'purchases.return';
+  static const inventoryCount = 'inventory.count';
+  static const cashView = 'cash.view';
+  static const cashShift = 'cash.shift';
+  static const cashCloseDay = 'cash.close_day';
+  static const cashReopen = 'cash.reopen';
+  static const accountsView = 'accounts.view';
+  static const accountsManage = 'accounts.manage';
+  static const customersDocuments = 'customers.documents';
+  static const returnsOverrideWindow = 'returns.override_window';
 
   /// Grouped for the role editor: group title -> (key, label).
   static const Map<String, List<(String, String)>> groups = {
@@ -41,6 +58,7 @@ class Perm {
       (salesDue, 'Sell on credit (due sale)'),
       (salesVoid, 'Void sales'),
       (returnsCreate, 'Create sales returns'),
+      (returnsOverrideWindow, 'Approve returns after the return period'),
     ],
     'Customers': [
       (customersView, 'View customers'),
@@ -59,6 +77,28 @@ class Perm {
       (productsManage, 'Add and edit products'),
       (inventoryView, 'View stock'),
       (inventoryAdjust, 'Adjust stock'),
+    ],
+    'Installments': [
+      (installmentsView, 'View installment plans'),
+      (installmentsCreate, 'Sell on installment'),
+      (installmentsCollect, 'Collect installments and follow up'),
+      (installmentsReschedule, 'Change installment due dates'),
+      (installmentsManage, 'Manage installment settings and reminders'),
+    ],
+    'Stock transfers and counts': [
+      (transfersView, 'View stock transfers'),
+      (transfersManage, 'Create, send and receive transfers'),
+      (inventoryCount, 'Do physical stock counts'),
+      (purchasesReturn, 'Return goods to suppliers'),
+    ],
+    'Cash and accounts': [
+      (cashView, 'View cash register and day closing'),
+      (cashShift, 'Open and close own cashier shift, cash in and out'),
+      (cashCloseDay, 'Close the day and see all shifts'),
+      (cashReopen, 'Reopen a closed day'),
+      (accountsView, 'View account statements'),
+      (accountsManage, 'Deposit, withdraw and transfer between accounts'),
+      (customersDocuments, 'See and upload customer NID and documents'),
     ],
     'Expenses': [
       (expensesView, 'View expenses'),
@@ -114,6 +154,7 @@ class Business {
 
   String _s(String k, String d) => (settings[k] as String?)?.trim().isNotEmpty == true ? settings[k] as String : d;
   bool _b(String k, bool d) => settings[k] is bool ? settings[k] as bool : d;
+  int _i(String k, int d) => settings[k] is num ? (settings[k] as num).toInt() : d;
 
   String get invoicePrefix => _s('invoice_prefix', 'INV');
   String get purchasePrefix => _s('purchase_prefix', 'PUR');
@@ -124,6 +165,19 @@ class Business {
   String get paperSize => _s('paper_size', '80mm');
   String get invoiceFooter => _s('invoice_footer', 'Thank you for shopping with us.');
   String get invoiceTerms => (settings['invoice_terms'] as String?) ?? '';
+
+  /// Days after a sale during which a return needs no approval. 0 means no limit.
+  int get returnWindowDays => _i('return_window_days', 0);
+
+  /// SKU rules: prefix and number of digits for product codes made by the system.
+  String get skuPrefix => _s('sku_prefix', 'P');
+  int get skuDigits => _i('sku_digits', 6).clamp(3, 10).toInt();
+
+  /// Digits that start every barcode the app generates (EAN-13, 20 to 29 is reserved for in-store use).
+  String get barcodePrefix => _s('barcode_prefix', '20');
+
+  /// Ask for the signed-in user's password before sensitive actions (void, stock adjustment, reopening a day).
+  bool get requirePasswordConfirm => _b('require_password_confirm', true);
 }
 
 class AppUser {

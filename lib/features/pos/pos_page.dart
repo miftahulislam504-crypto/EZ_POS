@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/data/common_data.dart';
+import '../../core/data/providers.dart';
 import '../../core/errors.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format.dart';
@@ -12,9 +14,12 @@ import '../../core/widgets/feedback.dart';
 import '../../core/widgets/inputs.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
+import '../inventory/serial_widgets.dart';
 import '../products/products_data.dart';
 import '../products/products_tab.dart';
 import 'cart_panel.dart';
+import 'checkout_sheet.dart';
+import 'customer_picker.dart';
 import 'pos_controller.dart';
 
 class PosPage extends ConsumerStatefulWidget {
@@ -30,6 +35,16 @@ class _PosPageState extends ConsumerState<PosPage> {
   String _q = '';
   String? _categoryId;
 
+  /// Keyboard and barcode-scanner use: the search box is ready as soon as the counter screen opens.
+  bool get _hasKeyboard =>
+      kIsWeb || const {TargetPlatform.windows, TargetPlatform.macOS, TargetPlatform.linux}.contains(defaultTargetPlatform);
+
+  @override
+  void initState() {
+    super.initState();
+    if (_hasKeyboard) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _searchFocus.requestFocus() : null);
+  }
+
   @override
   void dispose() {
     _search.dispose();
@@ -37,7 +52,19 @@ class _PosPageState extends ConsumerState<PosPage> {
     super.dispose();
   }
 
-  void _add(Product p) {
+  Future<void> _add(Product p) async {
+    if (p.usesSerials) {
+      final line = ref.read(cartProvider).lines.where((l) => l.product.id == p.id).firstOrNull;
+      final picked = await showSerialPicker(
+        context,
+        productId: p.id,
+        productName: p.name,
+        branchId: ref.read(currentUserProvider).branchId,
+        selected: line?.serials ?? const [],
+      );
+      if (picked != null) ref.read(cartProvider.notifier).setSerials(p, picked);
+      return;
+    }
     final err = ref.read(cartProvider.notifier).add(p);
     if (err != null) {
       showToast(context, err, error: true);
@@ -90,6 +117,72 @@ class _PosPageState extends ConsumerState<PosPage> {
     );
   }
 
+  Future<void> _pickCustomer() async {
+    final pick = await showCustomerPicker(context);
+    if (pick != null) ref.read(cartProvider.notifier).setCustomer(pick.customer);
+  }
+
+  Future<void> _holdCurrent() async {
+    final cart = ref.read(cartProvider);
+    if (cart.isEmpty) {
+      showToast(context, 'The cart is empty, so there is nothing to hold.');
+      return;
+    }
+    await ref.read(heldCartsProvider.notifier).hold(cart);
+    ref.read(cartProvider.notifier).clear();
+    if (mounted) showToast(context, 'Sale put on hold');
+  }
+
+  void _charge() {
+    if (ref.read(cartProvider).isEmpty) {
+      showToast(context, 'Add a product before charging.');
+      return;
+    }
+    showCheckout(context, ref);
+  }
+
+  /// Escape clears the search box so the next scan starts clean.
+  void _escape() {
+    if (_search.text.isNotEmpty) {
+      _search.clear();
+      setState(() => _q = '');
+    }
+    _searchFocus.requestFocus();
+  }
+
+  static const _shortcuts = <(String, String)>[
+    ('F2  or  Ctrl + K', 'Go to the search and scan box'),
+    ('Enter (in the search box)', 'Add the product with that exact barcode or SKU'),
+    ('F4', 'Choose the customer'),
+    ('F6', 'Hold the current sale'),
+    ('F7', 'Open held sales'),
+    ('F9  or  Ctrl + Enter', 'Charge: open the payment screen'),
+    ('Esc', 'Clear the search box'),
+    ('F1', 'Show this list'),
+  ];
+
+  void _showShortcuts() {
+    showAppSheet<void>(
+      context,
+      title: 'Keyboard shortcuts',
+      builder: (ctx) => Column(
+        children: [
+          for (final k in _shortcuts)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 190, child: Text(k.$1, style: const TextStyle(fontWeight: FontWeight.w800))),
+                  Expanded(child: Text(k.$2)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   void _openHeld() {
     showAppSheet<void>(context, title: 'Held sales', builder: (_) => const _HeldCartsList());
   }
@@ -112,6 +205,7 @@ class _PosPageState extends ConsumerState<PosPage> {
               Expanded(
                 child: SearchField(
                   controller: _search,
+                  focusNode: _searchFocus,
                   hint: 'Search or scan product',
                   debounce: const Duration(milliseconds: 250),
                   onChanged: (v) => setState(() => _q = v),
@@ -175,10 +269,29 @@ class _PosPageState extends ConsumerState<PosPage> {
       ],
     );
 
-    return Scaffold(
+    final bindings = <ShortcutActivator, VoidCallback>{
+      const SingleActivator(LogicalKeyboardKey.f1): _showShortcuts,
+      const SingleActivator(LogicalKeyboardKey.f2): _searchFocus.requestFocus,
+      const SingleActivator(LogicalKeyboardKey.keyK, control: true): _searchFocus.requestFocus,
+      const SingleActivator(LogicalKeyboardKey.f4): _pickCustomer,
+      const SingleActivator(LogicalKeyboardKey.f6): _holdCurrent,
+      const SingleActivator(LogicalKeyboardKey.f7): _openHeld,
+      const SingleActivator(LogicalKeyboardKey.f9): _charge,
+      const SingleActivator(LogicalKeyboardKey.enter, control: true): _charge,
+      const SingleActivator(LogicalKeyboardKey.escape): _escape,
+    };
+
+    // Shortcuts work from anywhere on this screen, also while the search box has focus. They stop while a sheet or
+    // dialog is open, because those sit above this screen.
+    return CallbackShortcuts(
+      bindings: bindings,
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
       appBar: AppBar(
         title: const Text('Point of sale'),
         actions: [
+          if (wide) IconButton(icon: const Icon(Icons.keyboard_alt_outlined), tooltip: 'Keyboard shortcuts (F1)', onPressed: _showShortcuts),
           Stack(
             alignment: Alignment.center,
             children: [
@@ -242,6 +355,8 @@ class _PosPageState extends ConsumerState<PosPage> {
                 ),
               ),
             ),
+        ),
+      ),
     );
   }
 }

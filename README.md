@@ -89,3 +89,21 @@ Barcode scanners that type into the keyboard (most USB and Bluetooth scanners) w
 - Lists load up to a page of rows with a "Load more" button. Very large catalogs will get server-side paging in Phase 3.
 - Offline mode and sync queue, installments, serial/IMEI tracking, stock transfer, cash register and day closing are in later phases (see `docs/ROADMAP.md`).
 - Backups: enable Point in Time Recovery in your Supabase project settings for production use.
+
+
+## Phase 2 setup notes
+- Run the new migrations `0006` to `0014` in order after the Phase 1 ones (`supabase db push`).
+- `0013_documents_storage.sql` creates the private `documents` bucket and needs Supabase Storage.
+- Reminders open WhatsApp, SMS or the phone dialer with `url_launcher`. On Android add `<queries>` entries for the
+  `https`, `sms` and `tel` schemes in `AndroidManifest.xml`; on iOS add `whatsapp`, `sms` and `tel` to
+  `LSApplicationQueriesSchemes` in `Info.plist`.
+- `bash tool/bootstrap.sh` also adds the Bluetooth and USB permissions that receipt printers need. Run it once after
+  `flutter create`, and again if you recreate the platform folders.
+- Receipt printer: Settings > Printer on this device. Network printers use port 9100. Bluetooth printers must be paired
+  in the phone settings first. USB printing is Android only; iOS supports Bluetooth Low Energy printers. The web app
+  uses the browser print dialog.
+- Password confirmation uses the database function `verify_password`, which reads Supabase Auth's stored hash. It needs
+  the `pgcrypto` extension (installed by default on Supabase).
+- Tests: `python supabase/tests/apply_migrations.py && python supabase/tests/scenario_phase1.py && python supabase/tests/scenario_phase2.py && python supabase/tests/scenario_phase2_finish.py`
+  (needs `pip install pgserver psycopg2-binary`), and `flutter test`.
+- See `Progress.md` for what is done and what remains.

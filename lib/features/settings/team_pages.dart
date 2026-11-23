@@ -12,6 +12,7 @@ import '../../core/widgets/feedback.dart';
 import '../../core/widgets/inputs.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../core/security/password_confirm.dart';
 import 'settings_data.dart';
 
 class TeamPage extends ConsumerWidget {
@@ -162,6 +163,7 @@ class TeamPage extends ConsumerWidget {
             onChanged: (v) async {
               if (v == null || v == m.role) return;
               Navigator.pop(ctx);
+              if (!await confirmSensitive(context, ref)) return;
               try {
                 await ref.read(settingsRepoProvider).updateMember(m.id, {'role': v});
                 ref.invalidate(membersProvider);
@@ -184,6 +186,7 @@ class TeamPage extends ConsumerWidget {
               AppButton(m.isActive ? 'Deactivate' : 'Activate', icon: m.isActive ? Icons.block_rounded : Icons.check_circle_outline_rounded,
                   kind: m.isActive ? ButtonKind.danger : ButtonKind.primary, dense: true, onPressed: () async {
                 Navigator.pop(ctx);
+                if (!await confirmSensitive(context, ref)) return;
                 try {
                   await ref.read(settingsRepoProvider).updateMember(m.id, {'is_active': !m.isActive});
                   ref.invalidate(membersProvider);
@@ -217,6 +220,7 @@ class TeamPage extends ConsumerWidget {
       ),
     );
     if (ok == true) {
+      if (!context.mounted || !await confirmSensitive(context, ref)) return;
       try {
         await ref.read(settingsRepoProvider).resetPassword(m.id, pw.text);
         if (context.mounted) showToast(context, 'Password updated');
@@ -236,6 +240,7 @@ class RolesPage extends ConsumerStatefulWidget {
 
 class _RolesPageState extends ConsumerState<RolesPage> {
   String _role = 'cashier';
+  bool _confirmed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -273,6 +278,10 @@ class _RolesPageState extends ConsumerState<RolesPage> {
                             title: Text(group.value[i].$2, style: const TextStyle(fontWeight: FontWeight.w600)),
                             value: granted.contains(group.value[i].$1),
                             onChanged: (v) async {
+                              if (!_confirmed) {
+                                if (!await confirmSensitive(context, ref, message: 'Changing permissions decides what your team can do. Enter your password once to edit this page.')) return;
+                                _confirmed = true;
+                              }
                               try {
                                 await ref.read(settingsRepoProvider).setPermission(_role, group.value[i].$1, v);
                                 ref.invalidate(rolePermissionsProvider);

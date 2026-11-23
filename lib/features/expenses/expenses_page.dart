@@ -8,12 +8,14 @@ import '../../core/errors.dart';
 import '../../core/models/app_user.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format.dart';
+import '../../core/widgets/attachments_section.dart';
 import '../../core/widgets/buttons.dart';
 import '../../core/widgets/date_range_bar.dart';
 import '../../core/widgets/feedback.dart';
 import '../../core/widgets/inputs.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../core/security/password_confirm.dart';
 import 'expenses_data.dart';
 
 class ExpensesPage extends ConsumerStatefulWidget {
@@ -167,12 +169,21 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
           if (e.paidBy != null) InfoRow('Paid by', e.paidBy!),
           if (e.note != null) InfoRow('Note', e.note!),
           if (e.isVoid) InfoRow('Void reason', e.voidReason ?? '-', valueColor: ctx.colors.danger),
+          const SizedBox(height: 8),
+          AttachmentsSection(
+            entityType: 'expense',
+            entityId: e.id,
+            title: 'Receipt',
+            canEdit: !e.isVoid && user.can(Perm.expensesCreate),
+            canDelete: !e.isVoid && user.can(Perm.expensesCreate),
+          ),
           if (!e.isVoid && user.can(Perm.expensesVoid)) ...[
             const SizedBox(height: 16),
             AppButton('Void expense', kind: ButtonKind.danger, icon: Icons.block_rounded, onPressed: () async {
               Navigator.pop(ctx);
               final reason = await reasonDialog(context, title: 'Void this expense?', message: 'The money will be returned to the account it was paid from.', confirmLabel: 'Void expense');
-              if (reason == null) return;
+              if (reason == null || !context.mounted) return;
+              if (!await confirmSensitive(context, ref)) return;
               try {
                 await ref.read(expenseRepoProvider).voidExpense(e.id, reason);
                 refreshAfterTransaction(ref);

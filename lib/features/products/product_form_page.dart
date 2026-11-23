@@ -77,6 +77,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   String? _unitId;
   String? _supplierId;
   bool _trackStock = true;
+  String _tracking = 'none';
   bool _isActive = true;
   String? _imageUrl;
   Uint8List? _newImage;
@@ -108,6 +109,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     _unitId = p?.unitId;
     _supplierId = p?.supplierId;
     _trackStock = p?.trackStock ?? true;
+    _tracking = p?.trackingType ?? 'none';
     _isActive = p?.isActive ?? true;
     _imageUrl = p?.imageUrl;
   }
@@ -200,6 +202,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
         'unit_id': _unitId,
         'product_type': _trackStock ? 'standard' : 'service',
         'track_stock': _trackStock,
+        'tracking_type': _trackStock ? _tracking : 'none',
         'purchase_price': Fmt.parse(_purchase.text),
         'selling_price': selling,
         'wholesale_price': _wholesale.text.trim().isEmpty ? null : Fmt.parse(_wholesale.text),
@@ -215,7 +218,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       final id = await repo.save(data, id: widget.product?.id);
 
       final opening = Fmt.parse(_openingStock.text);
-      if (!_isEdit && _trackStock && opening > 0) {
+      if (!_isEdit && _trackStock && _tracking == 'none' && opening > 0) {
         await ref.read(inventoryRepoProvider).adjust(productId: id, kind: 'opening', quantity: opening, note: 'Opening stock');
       }
 
@@ -305,7 +308,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                   IconButton(
                     icon: const Icon(Icons.auto_awesome_rounded, size: 20),
                     tooltip: 'Generate',
-                    onPressed: () => setState(() => _barcode.text = Barcodes.generateEan13()),
+                    onPressed: () => setState(() => _barcode.text = Barcodes.generateEan13(prefix: ref.read(currentUserProvider).business.barcodePrefix)),
                   ),
                 ],
               ),
@@ -385,6 +388,30 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
             onChanged: (v) => setState(() => _trackStock = v),
           ),
           if (_trackStock)
+            PickerField<String>(
+              label: 'Tracking',
+              value: _tracking,
+              enabled: !_isEdit || (widget.product?.stock ?? 0) <= 0,
+              options: const [
+                PickerOption('none', 'Quantity only'),
+                PickerOption('imei', 'IMEI (mobile phones)', subtitle: 'Every unit has its own IMEI'),
+                PickerOption('serial', 'Serial number', subtitle: 'TV, fridge, laptop and similar'),
+                PickerOption('batch', 'Batch', subtitle: 'Batch or lot number'),
+                PickerOption('expiry', 'Batch with expiry date', subtitle: 'Sold earliest expiry first'),
+              ],
+              onChanged: (v) => setState(() => _tracking = v ?? 'none'),
+            ),
+          if (_trackStock && _isEdit && (widget.product?.stock ?? 0) > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Tracking can be changed only while the product has no stock.', style: context.text.bodySmall?.copyWith(color: c.textMuted)),
+            ),
+          if (_trackStock && _tracking != 'none' && !_isEdit)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Add stock through a purchase or Adjust stock, where you enter the numbers or batches.', style: context.text.bodySmall?.copyWith(color: c.textMuted)),
+            ),
+          if (_trackStock)
             FieldRow([
               AppTextField(
                 controller: _lowStock,
@@ -392,7 +419,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                 hint: '0 = off',
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
               ),
-              if (!_isEdit)
+              if (!_isEdit && _tracking == 'none')
                 AppTextField(
                   controller: _openingStock,
                   label: 'Opening stock',

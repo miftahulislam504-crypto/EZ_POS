@@ -15,20 +15,27 @@ import '../products/products_tab.dart';
 import 'adjust_stock_sheet.dart';
 import 'inventory_data.dart';
 
-class InventoryPage extends StatelessWidget {
+class InventoryPage extends ConsumerWidget {
   const InventoryPage({super.key, this.initialTab = 0});
 
   final int initialTab;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
     return DefaultTabController(
       length: 3,
       initialIndex: initialTab,
-      child: const PageScaffold(
+      child: PageScaffold(
         title: 'Inventory',
-        bottom: TabBar(isScrollable: true, tabs: [Tab(text: 'Products'), Tab(text: 'Stock'), Tab(text: 'Movements')]),
-        body: TabBarView(children: [ProductsTab(), StockTab(), MovementsTab()]),
+        actions: [
+          if (user.can(Perm.transfersView)) IconButton(tooltip: 'Stock transfers', icon: const Icon(Icons.swap_horiz_rounded), onPressed: () => context.push('/inventory/transfers')),
+          if (user.can(Perm.inventoryCount)) IconButton(tooltip: 'Stock count', icon: const Icon(Icons.fact_check_outlined), onPressed: () => context.push('/inventory/counts')),
+          IconButton(tooltip: 'Serial and IMEI lookup', icon: const Icon(Icons.manage_search_rounded), onPressed: () => context.push('/inventory/serials')),
+          IconButton(tooltip: 'Expiry alerts', icon: const Icon(Icons.event_busy_outlined), onPressed: () => context.push('/inventory/expiry')),
+        ],
+        bottom: const TabBar(isScrollable: true, tabs: [Tab(text: 'Products'), Tab(text: 'Stock'), Tab(text: 'Movements')]),
+        body: const TabBarView(children: [ProductsTab(), StockTab(), MovementsTab()]),
       ),
     );
   }

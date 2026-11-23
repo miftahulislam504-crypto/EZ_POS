@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,7 @@ import '../../core/data/common_data.dart';
 import '../../core/data/providers.dart';
 import '../../core/errors.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/barcodes.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/json.dart';
 import '../../core/utils/validators.dart';
@@ -155,6 +157,8 @@ class _SalesSettingsPageState extends ConsumerState<SalesSettingsPage> {
   late bool _negative = _b.allowNegativeStock;
   late bool _due = _b.allowDueSale;
   late bool _customerRequired = _b.customerRequired;
+  late final _returnDays = TextEditingController(text: _b.returnWindowDays == 0 ? '' : '${_b.returnWindowDays}');
+  late bool _confirmPassword = _b.requirePasswordConfirm;
   bool _saving = false;
 
   @override
@@ -162,6 +166,7 @@ class _SalesSettingsPageState extends ConsumerState<SalesSettingsPage> {
     _invoicePrefix.dispose();
     _purchasePrefix.dispose();
     _defaultTax.dispose();
+    _returnDays.dispose();
     super.dispose();
   }
 
@@ -175,6 +180,8 @@ class _SalesSettingsPageState extends ConsumerState<SalesSettingsPage> {
         'allow_negative_stock': _negative,
         'allow_due_sale': _due,
         'customer_required': _customerRequired,
+        'return_window_days': (int.tryParse(_returnDays.text.trim()) ?? 0).clamp(0, 3650),
+        'require_password_confirm': _confirmPassword,
       });
       ref.invalidate(appUserProvider);
       if (mounted) {
@@ -225,6 +232,25 @@ class _SalesSettingsPageState extends ConsumerState<SalesSettingsPage> {
             onChanged: (v) => setState(() => _negative = v),
           ),
         ]),
+        FormSection('Returns', subtitle: 'Returns after this period need a manager with approval rights. The approval is recorded in the activity log.', children: [
+          AppTextField(
+            controller: _returnDays,
+            label: 'Return period (days)',
+            hint: 'Leave empty for no limit',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            helper: 'Counted from the invoice date. Applies to returns and exchanges.',
+          ),
+        ]),
+        FormSection('Security', children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Ask for the password on sensitive actions', style: TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: const Text('Voiding a sale or expense, stock adjustments, reopening a day, changing due dates, deleting files and changing permissions.'),
+            value: _confirmPassword,
+            onChanged: (v) => setState(() => _confirmPassword = v),
+          ),
+        ]),
         FormSection('Tax', children: [
           AppTextField(
             controller: _defaultTax,
@@ -233,6 +259,174 @@ class _SalesSettingsPageState extends ConsumerState<SalesSettingsPage> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
         ]),
+      ],
+    );
+  }
+}
+
+// ------------------------------------------------------------------ SKU and barcode rules
+class ProductRulesPage extends ConsumerStatefulWidget {
+  const ProductRulesPage({super.key});
+
+  @override
+  ConsumerState<ProductRulesPage> createState() => _ProductRulesPageState();
+}
+
+class _ProductRulesPageState extends ConsumerState<ProductRulesPage> {
+  late final _b = ref.read(currentUserProvider).business;
+  late final _prefix = TextEditingController(text: _b.settings['sku_prefix'] == null ? '' : _b.skuPrefix);
+  late final _barPrefix = TextEditingController(text: _b.barcodePrefix);
+  final _next = TextEditingController();
+  late int _digits = _b.skuDigits;
+  int? _last;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLast();
+  }
+
+  @override
+  void dispose() {
+    _prefix.dispose();
+    _barPrefix.dispose();
+    _next.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadLast() async {
+    try {
+      final v = await ref.read(supabaseProvider).rpc('sku_counter');
+      if (mounted) setState(() => _last = (v as num).toInt());
+    } catch (_) {
+      // The preview then starts from 1; saving still works.
+    }
+  }
+
+  String get _cleanPrefix {
+    final p = _prefix.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (p.isEmpty) return 'P';
+    return p.length > 8 ? p.substring(0, 8) : p;
+  }
+
+  int get _nextNumber => (int.tryParse(_next.text.trim()) ?? ((_last ?? 0) + 1));
+
+  String get _skuExample => '$_cleanPrefix-${_nextNumber.toString().padLeft(_digits, '0')}';
+
+  Future<void> _save() async {
+    final bar = _barPrefix.text.trim();
+    if (bar.isNotEmpty && !RegExp(r'^[0-9]{2,6}$').hasMatch(bar)) {
+      setState(() => _error = 'The barcode prefix must be 2 to 6 digits.');
+      return;
+    }
+    final next = int.tryParse(_next.text.trim());
+    if (_next.text.trim().isNotEmpty && (next == null || next < 1)) {
+      setState(() => _error = 'Enter a start number of 1 or more.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      if (next != null && (_last == null || next - 1 != _last)) {
+        await ref.read(supabaseProvider).rpc('set_sku_start', params: {'p_next': next});
+      }
+      await ref.read(settingsRepoProvider).saveSettings(_b, {
+        'sku_prefix': _cleanPrefix,
+        'sku_digits': _digits,
+        'barcode_prefix': Barcodes.cleanPrefix(bar),
+      });
+      ref.invalidate(appUserProvider);
+      if (mounted) {
+        context.pop();
+        showToast(context, 'Product rules saved');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = friendlyError(e);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final barPrefix = Barcodes.cleanPrefix(_barPrefix.text);
+    final barExample = Barcodes.generateEan13(prefix: barPrefix);
+    return FormScaffold(
+      title: 'SKU and barcode rules',
+      saving: _saving,
+      onSave: _save,
+      children: [
+        FormSection('Product code (SKU)', subtitle: 'Used when a product is saved without a code. Codes you type yourself are never changed.', children: [
+          FieldRow([
+            AppTextField(
+              controller: _prefix,
+              label: 'Prefix',
+              hint: 'P',
+              textCapitalization: TextCapitalization.characters,
+              onChanged: (_) => setState(() {}),
+              helper: 'Letters and digits, up to 8.',
+            ),
+            PickerField<int>(
+              label: 'Number length',
+              value: _digits,
+              options: [for (var n = 3; n <= 10; n++) PickerOption(n, '$n digits')],
+              onChanged: (v) => setState(() => _digits = v ?? _digits),
+            ),
+          ]),
+          AppTextField(
+            controller: _next,
+            label: 'Next number',
+            hint: '${(_last ?? 0) + 1}',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) => setState(() {}),
+            helper: _last == null ? 'Leave empty to continue from the last number.' : 'Last number used: $_last. A new start number must be higher so no code repeats.',
+          ),
+          AppCard(
+            color: c.surfaceMuted,
+            child: Row(
+              children: [
+                Icon(Icons.tag_rounded, color: c.textMuted),
+                const SizedBox(width: 12),
+                Text('Next product code:  ', style: TextStyle(color: c.textMuted)),
+                Text(_skuExample, style: const TextStyle(fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
+        ]),
+        FormSection('Barcode', subtitle: 'Used by the Generate button on the product form. The check digit is added for you.', children: [
+          AppTextField(
+            controller: _barPrefix,
+            label: 'Barcode prefix',
+            hint: '20',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) => setState(() {}),
+            helper: barPrefix.startsWith('2')
+                ? 'Codes starting with 2 are reserved for in-store use, so they never clash with manufacturer barcodes.'
+                : 'This prefix may clash with barcodes printed by manufacturers. Prefer one that starts with 2.',
+          ),
+          AppCard(
+            color: c.surfaceMuted,
+            child: Row(
+              children: [
+                Icon(Icons.qr_code_2_rounded, color: c.textMuted),
+                const SizedBox(width: 12),
+                Text('Example (EAN-13):  ', style: TextStyle(color: c.textMuted)),
+                Text(barExample, style: const TextStyle(fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
+        ]),
+        if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: c.danger, fontWeight: FontWeight.w700))),
       ],
     );
   }

@@ -99,6 +99,18 @@ class PurchaseRepository {
     return [for (final r in rows) PurchaseRow.fromJson(r)];
   }
 
+  Future<Map<String, dynamic>> createReturn(Map<String, dynamic> payload) async =>
+      asMap(await _client.rpc('create_purchase_return', params: {'p': payload}));
+
+  Future<List<Map<String, dynamic>>> returnsFor(String purchaseId) async {
+    final rows = await _client
+        .from('purchase_returns')
+        .select('id, return_no, return_date, total, refund_mode, refund_amount, reason')
+        .eq('purchase_id', purchaseId)
+        .order('return_date', ascending: false);
+    return [for (final r in rows) Map<String, dynamic>.from(r)];
+  }
+
   Future<PurchaseDetail> detail(String id) async {
     final j = await _client
         .from('purchases')
@@ -149,3 +161,6 @@ final purchasesListProvider = FutureProvider.autoDispose.family<List<PurchaseRow
 final purchaseDetailProvider = FutureProvider.autoDispose.family<PurchaseDetail, String>((ref, id) {
   return ref.watch(purchaseRepoProvider).detail(id);
 });
+
+final purchaseReturnsProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
+    (ref, id) => ref.watch(purchaseRepoProvider).returnsFor(id));

@@ -17,6 +17,10 @@ class Customer {
     this.nid,
     this.birthDate,
     this.occupation,
+    this.workplace,
+    this.emergencyName,
+    this.emergencyPhone,
+    this.remindersEnabled = true,
     this.group = 'regular',
     this.notes,
     this.isActive = true,
@@ -35,6 +39,12 @@ class Customer {
   final String? nid;
   final DateTime? birthDate;
   final String? occupation;
+  final String? workplace;
+  final String? emergencyName;
+  final String? emergencyPhone;
+
+  /// When off, no installment reminders are listed or sent for this customer.
+  final bool remindersEnabled;
   final String group;
   final String? notes;
   final bool isActive;
@@ -58,6 +68,10 @@ class Customer {
         nid: j['nid_number'] as String?,
         birthDate: parseDate(j['birth_date']),
         occupation: j['occupation'] as String?,
+        workplace: j['workplace'] as String?,
+        emergencyName: j['emergency_contact_name'] as String?,
+        emergencyPhone: j['emergency_contact_phone'] as String?,
+        remindersEnabled: j['reminders_enabled'] != false,
         group: (j['customer_group'] as String?) ?? 'regular',
         notes: j['notes'] as String?,
         isActive: j['is_active'] != false,

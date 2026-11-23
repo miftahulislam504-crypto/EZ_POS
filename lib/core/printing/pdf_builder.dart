@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../models/app_user.dart';
 import '../utils/format.dart';
+import 'direct_printer.dart';
 
 class PrintLine {
   const PrintLine({required this.name, required this.qty, required this.price, this.discount = 0, required this.total, this.sub});
@@ -35,8 +36,13 @@ class PrintableDoc {
     this.note,
     this.status,
     this.qrData,
+    this.simple = false,
+    this.amountLabel = 'Amount',
   });
 
+  /// Show each line as description and amount only (schedules, closing reports).
+  final bool simple;
+  final String amountLabel;
   final String title;
   final String number;
   final DateTime date;
@@ -129,14 +135,24 @@ class PdfBuilder {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text(l.name, style: s(bold: true)),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text('${l.qty} x ${Fmt.pdfMoney(l.price)}${l.discount > 0 ? '  (-${Fmt.pdfMoney(l.discount)})' : ''}', style: s()),
-                      pw.Text(Fmt.pdfMoney(l.total), style: s(bold: true)),
-                    ],
-                  ),
+                  if (d.simple)
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Expanded(child: pw.Text(l.name, style: s())),
+                        pw.Text(Fmt.pdfMoney(l.total), style: s(bold: true)),
+                      ],
+                    )
+                  else ...[
+                    pw.Text(l.name, style: s(bold: true)),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('${l.qty} x ${Fmt.pdfMoney(l.price)}${l.discount > 0 ? '  (-${Fmt.pdfMoney(l.discount)})' : ''}', style: s()),
+                        pw.Text(Fmt.pdfMoney(l.total), style: s(bold: true)),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -244,35 +260,55 @@ class PdfBuilder {
       if (d.lines.isNotEmpty)
         pw.Table(
           border: const pw.TableBorder(horizontalInside: pw.BorderSide(color: line, width: 0.6), bottom: pw.BorderSide(color: line)),
-          columnWidths: {
-            0: const pw.FixedColumnWidth(26),
-            1: const pw.FlexColumnWidth(4),
-            2: const pw.FlexColumnWidth(1.2),
-            3: const pw.FlexColumnWidth(1.5),
-            4: const pw.FlexColumnWidth(1.3),
-            5: const pw.FlexColumnWidth(1.7),
-          },
+          columnWidths: d.simple
+              ? {
+                  0: const pw.FixedColumnWidth(26),
+                  1: const pw.FlexColumnWidth(6),
+                  2: const pw.FlexColumnWidth(2),
+                }
+              : {
+                  0: const pw.FixedColumnWidth(26),
+                  1: const pw.FlexColumnWidth(4),
+                  2: const pw.FlexColumnWidth(1.2),
+                  3: const pw.FlexColumnWidth(1.5),
+                  4: const pw.FlexColumnWidth(1.3),
+                  5: const pw.FlexColumnWidth(1.7),
+                },
           children: [
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFEEF2F0)),
-              children: [
-                cell('#', bold: true),
-                cell('Item', bold: true),
-                cell('Qty', bold: true, align: pw.TextAlign.right),
-                cell('Price', bold: true, align: pw.TextAlign.right),
-                cell('Disc.', bold: true, align: pw.TextAlign.right),
-                cell('Total', bold: true, align: pw.TextAlign.right),
-              ],
+              children: d.simple
+                  ? [
+                      cell('#', bold: true),
+                      cell('Description', bold: true),
+                      cell(d.amountLabel, bold: true, align: pw.TextAlign.right),
+                    ]
+                  : [
+                      cell('#', bold: true),
+                      cell('Item', bold: true),
+                      cell('Qty', bold: true, align: pw.TextAlign.right),
+                      cell('Price', bold: true, align: pw.TextAlign.right),
+                      cell('Disc.', bold: true, align: pw.TextAlign.right),
+                      cell('Total', bold: true, align: pw.TextAlign.right),
+                    ],
             ),
             for (var i = 0; i < d.lines.length; i++)
-              pw.TableRow(children: [
-                cell('${i + 1}', color: muted),
-                cell(d.lines[i].sub == null ? d.lines[i].name : '${d.lines[i].name}\n${d.lines[i].sub}'),
-                cell(d.lines[i].qty, align: pw.TextAlign.right),
-                cell(Fmt.pdfMoney(d.lines[i].price), align: pw.TextAlign.right),
-                cell(d.lines[i].discount > 0 ? Fmt.pdfMoney(d.lines[i].discount) : '-', align: pw.TextAlign.right),
-                cell(Fmt.pdfMoney(d.lines[i].total), bold: true, align: pw.TextAlign.right),
-              ]),
+              pw.TableRow(
+                children: d.simple
+                    ? [
+                        cell('${i + 1}', color: muted),
+                        cell(d.lines[i].sub == null ? d.lines[i].name : '${d.lines[i].name}\n${d.lines[i].sub}'),
+                        cell(Fmt.pdfMoney(d.lines[i].total), bold: true, align: pw.TextAlign.right),
+                      ]
+                    : [
+                        cell('${i + 1}', color: muted),
+                        cell(d.lines[i].sub == null ? d.lines[i].name : '${d.lines[i].name}\n${d.lines[i].sub}'),
+                        cell(d.lines[i].qty, align: pw.TextAlign.right),
+                        cell(Fmt.pdfMoney(d.lines[i].price), align: pw.TextAlign.right),
+                        cell(d.lines[i].discount > 0 ? Fmt.pdfMoney(d.lines[i].discount) : '-', align: pw.TextAlign.right),
+                        cell(Fmt.pdfMoney(d.lines[i].total), bold: true, align: pw.TextAlign.right),
+                      ],
+              ),
           ],
         ),
       pw.SizedBox(height: 14),
@@ -329,6 +365,15 @@ class PdfBuilder {
   static Future<void> printDoc(PrintableDoc doc, Business business, {PaperSize? paper}) async {
     final size = paper ?? paperFromSetting(business.paperSize);
     final bytes = await build(doc, business, paper: size);
+    // A receipt printer set up on this device (Bluetooth, USB or network) prints directly. If none is set up, or it
+    // cannot be reached, the system print dialog opens as before.
+    if (size != PaperSize.a4) {
+      try {
+        if (await DirectPrinter.printPdf(bytes, paper: size)) return;
+      } catch (e) {
+        DirectPrinter.reportFailure(e);
+      }
+    }
     await Printing.layoutPdf(
       name: '${doc.title} ${doc.number}',
       onLayout: (_) async => bytes,

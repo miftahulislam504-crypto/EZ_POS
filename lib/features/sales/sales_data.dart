@@ -228,6 +228,47 @@ class SalesRepository {
     final res = await _client.rpc('create_sales_return', params: {'p': payload});
     return asMap(res);
   }
+
+  /// Everything printed on a refund or return receipt, read back from the saved return.
+  Future<ReturnReceipt> returnReceipt(String returnId) async {
+    final r = await _client
+        .from('sales_returns')
+        .select('*, customers(name, phone), sales(invoice_no), sales_return_items(*)')
+        .eq('id', returnId)
+        .single();
+    String? account;
+    final accId = r['refund_account_id'] as String?;
+    if (accId != null) {
+      final a = await _client.from('payment_accounts').select('name').eq('id', accId).maybeSingle();
+      account = a?['name'] as String?;
+    }
+    return ReturnReceipt(
+      returnNo: r['return_no'] as String,
+      date: parseDate(r['return_date']) ?? DateTime.now(),
+      invoiceNo: (r['sales'] as Map?)?['invoice_no'] as String? ?? '',
+      customerName: (r['customers'] as Map?)?['name'] as String?,
+      customerPhone: (r['customers'] as Map?)?['phone'] as String?,
+      reason: r['reason'] as String?,
+      total: dbl(r['total']),
+      dueAdjusted: dbl(r['due_adjusted']),
+      refund: dbl(r['refund_amount']),
+      refundAccount: account,
+      lines: [
+        for (final i in asRows(r['sales_return_items']))
+          ReturnReceiptLine(
+            name: i['product_name'] as String? ?? 'Item',
+            qty: dbl(i['quantity']),
+            amount: dbl(i['line_total']),
+            condition: (i['condition'] as String?) ?? 'resellable',
+          ),
+      ],
+    );
+  }
+
+  Future<Map<String, dynamic>> createExchange(Map<String, dynamic> payload) async {
+    final res = await _client.rpc('create_exchange', params: {'p': payload});
+    return asMap(res);
+  }
 }
 
 final salesRepoProvider = Provider<SalesRepository>((ref) => SalesRepository(ref.watch(supabaseProvider)));
@@ -238,6 +279,53 @@ final salesListProvider = FutureProvider.autoDispose.family<List<SaleRow>, SaleQ
 
 final saleDetailProvider = FutureProvider.autoDispose.family<SaleDetail, String>((ref, id) {
   return ref.watch(salesRepoProvider).detail(id);
+});
+
+class ReturnReceiptLine {
+  const ReturnReceiptLine({required this.name, required this.qty, required this.amount, required this.condition});
+
+  final String name;
+  final double qty;
+  final double amount;
+  final String condition;
+}
+
+class ReturnReceipt {
+  const ReturnReceipt({
+    required this.returnNo,
+    required this.date,
+    required this.invoiceNo,
+    required this.total,
+    required this.dueAdjusted,
+    required this.refund,
+    required this.lines,
+    this.customerName,
+    this.customerPhone,
+    this.reason,
+    this.refundAccount,
+  });
+
+  final String returnNo;
+  final DateTime date;
+  final String invoiceNo;
+  final String? customerName;
+  final String? customerPhone;
+  final String? reason;
+  final double total;
+  final double dueAdjusted;
+  final double refund;
+  final String? refundAccount;
+  final List<ReturnReceiptLine> lines;
+
+  /// Value that stays on the customer account as credit.
+  double get credit {
+    final c = total - dueAdjusted - refund;
+    return c > 0.004 ? c : 0;
+  }
+}
+
+final returnReceiptProvider = FutureProvider.autoDispose.family<ReturnReceipt, String>((ref, id) {
+  return ref.watch(salesRepoProvider).returnReceipt(id);
 });
 
 // ---------------------------------------------------------------- sales returns list

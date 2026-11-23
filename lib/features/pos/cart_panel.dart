@@ -11,6 +11,7 @@ import '../../core/widgets/inputs.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
 import '../customers/party_widgets.dart';
+import '../inventory/serial_widgets.dart';
 import '../products/products_tab.dart';
 import 'checkout_sheet.dart';
 import 'customer_picker.dart';
@@ -249,6 +250,39 @@ class _LineTile extends ConsumerWidget {
                   style: context.text.bodySmall?.copyWith(color: line.discount > 0 ? c.success : c.textMuted, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 6),
+                if (p.usesSerials)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () async {
+                      final picked = await showSerialPicker(
+                        context,
+                        productId: p.id,
+                        productName: p.name,
+                        branchId: ref.read(currentUserProvider).branchId,
+                        selected: line.serials,
+                      );
+                      if (picked != null) n.setSerials(p, picked);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.qr_code_2_rounded, size: 16, color: c.primary),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              '${line.serials.length} unit(s): ${line.serials.take(2).join(', ')}${line.serials.length > 2 ? '...' : ''}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.text.bodySmall?.copyWith(color: c.primary, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
                 Row(
                   children: [
                     _StepButton(icon: Icons.remove_rounded, onTap: () => tryQty(line.qty - 1)),
@@ -312,13 +346,15 @@ Future<void> _editLine(BuildContext context, WidgetRef ref, CartLine line, bool 
     builder: (ctx) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AppTextField(
-          controller: qty,
-          label: 'Quantity${line.product.unitName == null ? '' : ' (${line.product.unitName})'}',
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          autofocus: true,
-        ),
-        const SizedBox(height: 14),
+        if (!line.product.usesSerials) ...[
+          AppTextField(
+            controller: qty,
+            label: 'Quantity${line.product.unitName == null ? '' : ' (${line.product.unitName})'}',
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            autofocus: true,
+          ),
+          const SizedBox(height: 14),
+        ],
         MoneyField(controller: price, label: 'Unit price', enabled: canDiscount),
         const SizedBox(height: 14),
         MoneyField(controller: discount, label: 'Line discount (amount)', enabled: canDiscount),
@@ -330,10 +366,12 @@ Future<void> _editLine(BuildContext context, WidgetRef ref, CartLine line, bool 
         const SizedBox(height: 20),
         AppButton('Update item', expand: true, onPressed: () {
           final n = ref.read(cartProvider.notifier);
-          final err = n.setQty(line.product.id, Fmt.parse(qty.text));
-          if (err != null) {
-            showToast(ctx, err, error: true);
-            return;
+          if (!line.product.usesSerials) {
+            final err = n.setQty(line.product.id, Fmt.parse(qty.text));
+            if (err != null) {
+              showToast(ctx, err, error: true);
+              return;
+            }
           }
           if (canDiscount) n.updateLine(line.product.id, price: Fmt.parse(price.text), discount: Fmt.parse(discount.text));
           Navigator.pop(ctx);

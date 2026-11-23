@@ -12,6 +12,8 @@ import '../../core/widgets/feedback.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/stat_card.dart';
 import '../../core/widgets/surfaces.dart';
+import '../cash/cash_data.dart';
+import '../installments/installments_data.dart';
 import '../inventory/inventory_data.dart';
 import '../sales/sales_data.dart';
 import '../transactions/payments_data.dart';
@@ -42,6 +44,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     ref.invalidate(lowStockProvider);
     ref.invalidate(salesListProvider);
     ref.invalidate(customerPaymentsProvider);
+    ref.invalidate(installmentSummaryProvider);
+    ref.invalidate(myShiftProvider);
   }
 
   @override
@@ -78,6 +82,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 loading: const _CardsSkeleton(),
                 builder: (s) => _SummaryGrid(summary: s, user: user),
               ),
+              if (user.can(Perm.installmentsView) || user.can(Perm.cashView)) ...[
+                const SizedBox(height: 22),
+                _Phase2Cards(user: user),
+              ],
               const SizedBox(height: 22),
               if (user.can(Perm.dashboardView)) ...[
                 SectionHeader('Sales trend', trailing: SegmentedButton<int>(
@@ -128,6 +136,50 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 }
 
+/// Installment collection and cash register status.
+class _Phase2Cards extends ConsumerWidget {
+  const _Phase2Cards({required this.user});
+
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cards = <Widget>[];
+    if (user.can(Perm.installmentsView)) {
+      final s = ref.watch(installmentSummaryProvider).valueOrNull;
+      if (s != null) {
+        cards.addAll([
+          StatCard(label: 'Installments due today', value: s.dueTodayAmount, icon: Icons.event_rounded, tone: Tone.info, caption: '${s.dueTodayCount} to collect', onTap: () => context.go('/installments')),
+          StatCard(label: 'Overdue installments', value: s.overdueAmount, icon: Icons.warning_amber_rounded, tone: Tone.danger, caption: '${s.overdueCount} overdue', onTap: () => context.go('/installments')),
+          StatCard(label: 'Installments collected today', value: s.collectedToday, icon: Icons.payments_outlined, tone: Tone.success, caption: 'This month ${Fmt.money(s.collectedMonth)}', onTap: () => context.go('/installments')),
+        ]);
+      }
+    }
+    if (user.can(Perm.cashView)) {
+      final shift = ref.watch(myShiftProvider).valueOrNull;
+      cards.add(StatCard(
+        label: 'Cash register',
+        value: 0,
+        isMoney: false,
+        icon: Icons.point_of_sale_rounded,
+        tone: shift == null ? Tone.neutral : Tone.success,
+        caption: shift == null ? 'No open shift. Tap to open one.' : 'Shift ${shift.shiftNo} is open',
+        formatter: (_) => shift == null ? 'Closed' : 'Open',
+        onTap: () => context.go('/cash'),
+      ));
+    }
+    if (cards.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, box) {
+        final cols = box.maxWidth >= 1000 ? 4 : (box.maxWidth >= 640 ? 3 : 2);
+        const gap = 12.0;
+        final w = (box.maxWidth - gap * (cols - 1)) / cols;
+        return Wrap(spacing: gap, runSpacing: gap, children: [for (final c in cards) SizedBox(width: w, child: c)]);
+      },
+    );
+  }
+}
+
 class _QuickActions extends StatelessWidget {
   const _QuickActions({required this.user});
 
@@ -142,6 +194,9 @@ class _QuickActions extends StatelessWidget {
       ('Add customer', Icons.person_add_alt_1_rounded, '/customers/new', user.can(Perm.customersManage)),
       ('Add supplier', Icons.add_business_outlined, '/suppliers/new', user.can(Perm.suppliersManage)),
       ('Collect due', Icons.payments_outlined, '/customers', user.can(Perm.customersPayment)),
+      ('Collect installment', Icons.event_repeat_rounded, '/installments', user.can(Perm.installmentsCollect)),
+      ('Stock transfer', Icons.swap_horiz_rounded, '/inventory/transfers', user.can(Perm.transfersView)),
+      ('Cash register', Icons.account_balance_wallet_outlined, '/cash', user.can(Perm.cashView)),
       ('Add expense', Icons.receipt_outlined, '/expenses', user.can(Perm.expensesCreate)),
       ('Reports', Icons.bar_chart_rounded, '/reports', user.can(Perm.reportsView)),
     ].where((a) => a.$4).toList();

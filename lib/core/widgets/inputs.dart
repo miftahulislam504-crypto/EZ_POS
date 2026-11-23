@@ -162,6 +162,7 @@ class SearchField extends StatefulWidget {
     this.autofocus = false,
     this.debounce = const Duration(milliseconds: 300),
     this.trailing,
+    this.focusNode,
   });
 
   final ValueChanged<String> onChanged;
@@ -171,6 +172,7 @@ class SearchField extends StatefulWidget {
   final bool autofocus;
   final Duration debounce;
   final Widget? trailing;
+  final FocusNode? focusNode;
 
   @override
   State<SearchField> createState() => _SearchFieldState();
@@ -198,6 +200,7 @@ class _SearchFieldState extends State<SearchField> {
     final c = context.colors;
     return TextField(
       controller: _controller,
+      focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       onChanged: _changed,
       onSubmitted: (v) {

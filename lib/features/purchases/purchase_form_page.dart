@@ -15,6 +15,7 @@ import '../../core/widgets/feedback.dart';
 import '../../core/widgets/inputs.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
+import '../inventory/serial_widgets.dart';
 import '../products/products_data.dart';
 import '../products/products_tab.dart';
 import 'purchases_data.dart';
@@ -23,12 +24,16 @@ class _Line {
   _Line(this.product, {double qty = 1, double? cost})
       : qty = TextEditingController(text: Fmt.qty(qty)),
         cost = TextEditingController(text: (cost ?? product.purchasePrice).toStringAsFixed(2)),
-        discount = TextEditingController();
+        discount = TextEditingController(),
+        batch = TextEditingController();
 
   final Product product;
   final TextEditingController qty;
   final TextEditingController cost;
   final TextEditingController discount;
+  final TextEditingController batch;
+  List<String> serials = [];
+  DateTime? expiry;
 
   int get totalC {
     final gross = ((Fmt.parse(qty.text) * 1000).round() * Cents.of(Fmt.parse(cost.text)) + 500) ~/ 1000;
@@ -40,6 +45,7 @@ class _Line {
     qty.dispose();
     cost.dispose();
     discount.dispose();
+    batch.dispose();
   }
 }
 
@@ -103,13 +109,35 @@ class _PurchaseFormPageState extends ConsumerState<PurchaseFormPage> {
   Future<void> _addProduct() async {
     final p = await showAppSheet<Product>(context, title: 'Add product', maxWidth: 560, builder: (_) => const _PurchaseProductPicker());
     if (p == null) return;
+    _addLine(p);
+  }
+
+  void _addLine(Product p) {
     final existing = _lines.where((l) => l.product.id == p.id).firstOrNull;
     setState(() {
       if (existing != null) {
-        existing.qty.text = Fmt.qty(Fmt.parse(existing.qty.text) + 1);
+        if (p.usesSerials) {
+          showToast(context, 'Use the serial list on the existing line to add more units.', error: true);
+        } else {
+          existing.qty.text = Fmt.qty(Fmt.parse(existing.qty.text) + 1);
+        }
       } else {
-        _lines.add(_Line(p));
+        _lines.add(_Line(p, qty: p.usesSerials ? 0 : 1));
       }
+    });
+  }
+
+  Future<void> _editSerials(_Line l) async {
+    final picked = await showSerialEntry(
+      context,
+      productName: l.product.name,
+      kind: l.product.trackingType,
+      initial: l.serials,
+    );
+    if (picked == null) return;
+    setState(() {
+      l.serials = picked;
+      l.qty.text = Fmt.qty(picked.length);
     });
   }
 
@@ -122,14 +150,7 @@ class _PurchaseFormPageState extends ConsumerState<PurchaseFormPage> {
       showToast(context, 'No product found for "$code".', error: true);
       return;
     }
-    setState(() {
-      final existing = _lines.where((l) => l.product.id == p.id).firstOrNull;
-      if (existing != null) {
-        existing.qty.text = Fmt.qty(Fmt.parse(existing.qty.text) + 1);
-      } else {
-        _lines.add(_Line(p));
-      }
-    });
+    _addLine(p);
   }
 
   Future<void> _save(List<PaymentAccount> accounts) async {
@@ -143,7 +164,19 @@ class _PurchaseFormPageState extends ConsumerState<PurchaseFormPage> {
     }
     for (final l in _lines) {
       if (Fmt.parse(l.qty.text) <= 0) {
-        setState(() => _error = 'Enter a quantity for ${l.product.name}.');
+        setState(() => _error = l.product.usesSerials ? 'Enter the serial numbers for ${l.product.name}.' : 'Enter a quantity for ${l.product.name}.');
+        return;
+      }
+      if (l.product.usesSerials && l.serials.length != Fmt.parse(l.qty.text).round()) {
+        setState(() => _error = '${l.product.name} needs one serial/IMEI number for each unit.');
+        return;
+      }
+      if (l.product.trackingType == 'batch' && l.batch.text.trim().isEmpty) {
+        setState(() => _error = 'Enter the batch number for ${l.product.name}.');
+        return;
+      }
+      if (l.product.trackingType == 'expiry' && l.expiry == null) {
+        setState(() => _error = 'Enter the expiry date for ${l.product.name}.');
         return;
       }
     }
@@ -167,7 +200,15 @@ class _PurchaseFormPageState extends ConsumerState<PurchaseFormPage> {
         'client_ref': _clientRef,
         'items': [
           for (final l in _lines)
-            {'product_id': l.product.id, 'quantity': Fmt.parse(l.qty.text), 'unit_cost': Fmt.parse(l.cost.text), 'discount': Fmt.parse(l.discount.text)}
+            {
+              'product_id': l.product.id,
+              'quantity': Fmt.parse(l.qty.text),
+              'unit_cost': Fmt.parse(l.cost.text),
+              'discount': Fmt.parse(l.discount.text),
+              if (l.product.usesSerials) 'serials': l.serials,
+              if (l.product.usesBatches && l.batch.text.trim().isNotEmpty) 'batch_no': l.batch.text.trim(),
+              if (l.product.usesBatches && l.expiry != null) 'expiry_date': Fmt.iso(l.expiry!),
+            }
         ],
         'payments': [
           for (final p in _pays)
@@ -247,11 +288,38 @@ class _PurchaseFormPageState extends ConsumerState<PurchaseFormPage> {
                       label: 'Quantity${_lines[i].product.unitName == null ? '' : ' (${_lines[i].product.unitName})'}',
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}'))],
+                      readOnly: _lines[i].product.usesSerials,
                       onChanged: (_) => setState(() {}),
                     ),
                     MoneyField(controller: _lines[i].cost, label: 'Unit cost', onChanged: (_) => setState(() {})),
                     MoneyField(controller: _lines[i].discount, label: 'Discount', onChanged: (_) => setState(() {})),
                   ]),
+                  if (_lines[i].product.usesSerials) ...[
+                    const SizedBox(height: 10),
+                    AppButton(
+                      _lines[i].serials.isEmpty
+                          ? 'Enter ${_lines[i].product.trackingType == 'imei' ? 'IMEI' : 'serial'} numbers'
+                          : '${_lines[i].serials.length} ${_lines[i].product.trackingType == 'imei' ? 'IMEI' : 'serial'} number(s) entered',
+                      icon: Icons.qr_code_2_rounded,
+                      kind: ButtonKind.secondary,
+                      dense: true,
+                      onPressed: () => _editSerials(_lines[i]),
+                    ),
+                  ],
+                  if (_lines[i].product.usesBatches) ...[
+                    const SizedBox(height: 10),
+                    FieldRow([
+                      AppTextField(controller: _lines[i].batch, label: _lines[i].product.trackingType == 'batch' ? 'Batch number' : 'Batch number (optional)'),
+                      DateField(
+                        label: _lines[i].product.trackingType == 'expiry' ? 'Expiry date' : 'Expiry date (optional)',
+                        value: _lines[i].expiry,
+                        allowClear: true,
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
+                        onChanged: (d) => setState(() => _lines[i].expiry = d),
+                      ),
+                    ]),
+                  ],
                   const SizedBox(height: 8),
                   Align(alignment: Alignment.centerRight, child: Text('Line total  ${Fmt.money(Cents.toDouble(_lines[i].totalC))}', style: const TextStyle(fontWeight: FontWeight.w800))),
                 ],

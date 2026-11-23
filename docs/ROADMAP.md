@@ -3,7 +3,7 @@
 Every feature in the EZ POS feature plan (EZ_POS_Feature_Plan_BN.md) appears below with the phase it ships in.
 Status: **Done** = in this release, otherwise the target phase.
 
-Phase 1 Core POS (this release) | Phase 2 Installments and advanced inventory | Phase 3 Intelligence and multi-branch | Phase 4 Advanced retail
+Phase 1 Core POS (done) | Phase 2 Installments and advanced inventory (complete in code, see Progress.md) | Phase 3 Intelligence and multi-branch | Phase 4 Advanced retail
 
 ## 3. Dashboard
 | Feature | Phase |
@@ -157,13 +157,13 @@ In-app low stock list is Done. Push, SMS, WhatsApp, email, templates, customer r
 | Feature | Phase |
 |---|---|
 | Row level security, role based access, void instead of delete, audit entries, deactivation | Done |
-| PIN or password confirmation for sensitive actions | 2 |
-| Restricted access to NID documents | 2 |
+| PIN or password confirmation for sensitive actions | 2 (done) |
+| Restricted access to NID documents | 2 (done) |
 | Export permission, retention and account closure policy | 3 |
 | Backups | Supabase Point in Time Recovery (see README) |
 
 ## 22. Business rules
-Rules 1, 2, 5, 6, 7, 8, 10, 11, 12, 13 are enforced in this release. Rules 3, 4, 14 (installments) and 9 (purchase return) and 15 (day closing) ship with Phase 2.
+Rules 1 to 15 are enforced as of Phase 2 (3, 4, 14 installments, 9 purchase return, 15 day closing). Rule 10 approval for corrections beyond void is part of the Phase 3 approval workflow.
 
 ## 24 and Phase 4
 Customer portal, online payment links, e-commerce and accounting integrations, warranty and repair tickets, purchase suggestions, smart insights, credit limits and approval, commissions, loyalty, coupons, gift cards, membership, wholesale price lists, supplier catalogs, CRM: **Phase 3 and 4** as listed in the plan.

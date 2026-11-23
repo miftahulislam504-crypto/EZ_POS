@@ -10,28 +10,36 @@ import '../customers/customers_data.dart';
 import '../products/products_data.dart';
 
 class CartLine {
-  const CartLine({required this.product, required this.qty, required this.price, this.discount = 0});
+  const CartLine({required this.product, required this.qty, required this.price, this.discount = 0, this.serials = const []});
 
   final Product product;
   final double qty;
   final double price;
   final double discount;
 
-  CartLine copyWith({double? qty, double? price, double? discount}) =>
-      CartLine(product: product, qty: qty ?? this.qty, price: price ?? this.price, discount: discount ?? this.discount);
+  /// Serial/IMEI numbers chosen for this line (serial and IMEI products only). One per unit.
+  final List<String> serials;
+
+  CartLine copyWith({double? qty, double? price, double? discount, List<String>? serials}) => CartLine(
+      product: product,
+      qty: qty ?? this.qty,
+      price: price ?? this.price,
+      discount: discount ?? this.discount,
+      serials: serials ?? this.serials);
 
   // Everything below is integer cents and matches create_sale() in the database exactly.
   int get grossC => ((qty * 1000).round() * Cents.of(price) + 500) ~/ 1000;
   int get discountC => Cents.of(discount).clamp(0, grossC).toInt();
   int get net1C => grossC - discountC;
 
-  Map<String, dynamic> toJson() => {'product': product.toCache(), 'qty': qty, 'price': price, 'discount': discount};
+  Map<String, dynamic> toJson() => {'product': product.toCache(), 'qty': qty, 'price': price, 'discount': discount, 'serials': serials};
 
   factory CartLine.fromJson(Map<String, dynamic> j) => CartLine(
         product: Product.fromCache(asMap(j['product'])),
         qty: dbl(j['qty']),
         price: dbl(j['price']),
         discount: dbl(j['discount']),
+        serials: [for (final s in (j['serials'] as List? ?? const [])) s.toString()],
       );
 }
 
@@ -117,7 +125,13 @@ class CartState {
         'client_ref': clientRef,
         'items': [
           for (final l in lines)
-            {'product_id': l.product.id, 'quantity': l.qty, 'unit_price': l.price, 'discount': l.discount}
+            {
+              'product_id': l.product.id,
+              'quantity': l.qty,
+              'unit_price': l.price,
+              'discount': l.discount,
+              if (l.product.usesSerials) 'serials': l.serials,
+            }
         ],
         'payments': payments,
       };
@@ -153,9 +167,26 @@ class CartNotifier extends Notifier<CartState> {
     return null;
   }
 
+  /// Sets the units chosen for a serial/IMEI product. The quantity always equals the number of serials.
+  void setSerials(Product p, List<String> serials) {
+    final idx = state.lines.indexWhere((l) => l.product.id == p.id);
+    if (serials.isEmpty) {
+      if (idx >= 0) remove(p.id);
+      return;
+    }
+    final lines = [...state.lines];
+    if (idx >= 0) {
+      lines[idx] = lines[idx].copyWith(qty: serials.length.toDouble(), serials: serials);
+    } else {
+      lines.add(CartLine(product: p, qty: serials.length.toDouble(), price: _priceFor(p), serials: serials));
+    }
+    state = state.copyWith(lines: lines);
+  }
+
   String? setQty(String productId, double qty) {
     final idx = state.lines.indexWhere((l) => l.product.id == productId);
     if (idx < 0) return null;
+    if (state.lines[idx].product.usesSerials) return 'Choose the units from the serial list.';
     if (qty <= 0) {
       remove(productId);
       return null;

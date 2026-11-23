@@ -22,6 +22,7 @@ class Product {
     this.unitName,
     this.productType = 'standard',
     this.trackStock = true,
+    this.trackingType = 'none',
     this.purchasePrice = 0,
     this.avgCost = 0,
     this.sellingPrice = 0,
@@ -51,6 +52,9 @@ class Product {
   final String? unitName;
   final String productType;
   final bool trackStock;
+
+  /// none, serial, imei, batch or expiry
+  final String trackingType;
   final double purchasePrice;
   final double avgCost;
   final double sellingPrice;
@@ -67,6 +71,8 @@ class Product {
   final double damaged;
 
   bool get isService => !trackStock;
+  bool get usesSerials => trackStock && (trackingType == 'serial' || trackingType == 'imei');
+  bool get usesBatches => trackStock && (trackingType == 'batch' || trackingType == 'expiry');
   bool get outOfStock => trackStock && stock <= 0;
   bool get lowStock => trackStock && stock > 0 && lowStockLimit > 0 && stock <= lowStockLimit;
 
@@ -91,6 +97,7 @@ class Product {
       unitName: (j['units'] as Map?)?['short_name'] as String?,
       productType: (j['product_type'] as String?) ?? 'standard',
       trackStock: j['track_stock'] != false,
+      trackingType: (j['tracking_type'] as String?) ?? 'none',
       purchasePrice: dbl(j['purchase_price']),
       avgCost: dbl(j['avg_cost']),
       sellingPrice: dbl(j['selling_price']),
@@ -116,6 +123,8 @@ class Product {
         'barcode': barcode,
         'unit': unitName,
         'track_stock': trackStock,
+        'tracking': trackingType,
+        'warranty': warrantyMonths,
         'cost': avgCost,
         'price': sellingPrice,
         'wholesale': wholesalePrice,
@@ -133,6 +142,8 @@ class Product {
         barcode: j['barcode'] as String?,
         unitName: j['unit'] as String?,
         trackStock: j['track_stock'] != false,
+        trackingType: (j['tracking'] as String?) ?? 'none',
+        warrantyMonths: j['warranty'] == null ? null : intOf(j['warranty']),
         avgCost: dbl(j['cost']),
         sellingPrice: dbl(j['price']),
         wholesalePrice: dblOrNull(j['wholesale']),

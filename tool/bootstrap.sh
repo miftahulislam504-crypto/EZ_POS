@@ -38,6 +38,35 @@ if os.path.exists(plist):
         print('iOS Info.plist updated')
 PY
 
+# Receipt printers: Bluetooth (Android 12+ run-time permissions, older versions use the legacy ones) and USB host
+python3 - <<'PY'
+import os
+manifest = 'android/app/src/main/AndroidManifest.xml'
+if os.path.exists(manifest):
+    s = open(manifest).read()
+    if 'BLUETOOTH_CONNECT' not in s:
+        add = ('    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>\n'
+               '    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>\n'
+               '    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>\n'
+               '    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>\n'
+               '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30"/>\n'
+               '    <uses-feature android:name="android.hardware.bluetooth" android:required="false"/>\n'
+               '    <uses-feature android:name="android.hardware.usb.host" android:required="false"/>\n')
+        s = s.replace('<application', add + '    <application', 1)
+        open(manifest, 'w').write(s)
+        print('Android manifest: Bluetooth and USB printer permissions added')
+
+plist = 'ios/Runner/Info.plist'
+if os.path.exists(plist):
+    s = open(plist).read()
+    if 'NSBluetoothAlwaysUsageDescription' not in s:
+        add = ('\n\t<key>NSBluetoothAlwaysUsageDescription</key>\n\t<string>EZ POS connects to your Bluetooth receipt printer.</string>'
+               '\n\t<key>NSBluetoothPeripheralUsageDescription</key>\n\t<string>EZ POS connects to your Bluetooth receipt printer.</string>')
+        s = s.replace('<dict>', '<dict>' + add, 1)
+        open(plist, 'w').write(s)
+        print('iOS Info.plist: Bluetooth printer description added')
+PY
+
 # mobile_scanner needs iOS 15.5 or newer
 python3 - <<'PY'
 import os, re

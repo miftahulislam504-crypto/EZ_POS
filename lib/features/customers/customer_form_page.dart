@@ -50,6 +50,10 @@ class _CustomerFormState extends ConsumerState<_CustomerForm> {
   late final _nid = TextEditingController(text: widget.customer?.nid ?? '');
   late final _occupation = TextEditingController(text: widget.customer?.occupation ?? '');
   late final _notes = TextEditingController(text: widget.customer?.notes ?? '');
+  late final _workplace = TextEditingController(text: widget.customer?.workplace ?? '');
+  late final _emergencyName = TextEditingController(text: widget.customer?.emergencyName ?? '');
+  late final _emergencyPhone = TextEditingController(text: widget.customer?.emergencyPhone ?? '');
+  late bool _reminders = widget.customer?.remindersEnabled ?? true;
   final _opening = TextEditingController();
   late String _group = widget.customer?.group ?? 'regular';
   late DateTime? _birth = widget.customer?.birthDate;
@@ -61,7 +65,7 @@ class _CustomerFormState extends ConsumerState<_CustomerForm> {
 
   @override
   void dispose() {
-    for (final c in [_name, _phone, _alt, _email, _present, _permanent, _nid, _occupation, _notes, _opening]) {
+    for (final c in [_name, _phone, _alt, _email, _present, _permanent, _nid, _occupation, _notes, _opening, _workplace, _emergencyName, _emergencyPhone]) {
       c.dispose();
     }
     super.dispose();
@@ -84,6 +88,10 @@ class _CustomerFormState extends ConsumerState<_CustomerForm> {
           'nid_number': nonEmpty(_nid.text),
           'birth_date': _birth == null ? null : Fmt.iso(_birth!),
           'occupation': nonEmpty(_occupation.text),
+          'workplace': nonEmpty(_workplace.text),
+          'emergency_contact_name': nonEmpty(_emergencyName.text),
+          'emergency_contact_phone': nonEmpty(_emergencyPhone.text),
+          'reminders_enabled': _reminders,
           'customer_group': _group,
           'notes': nonEmpty(_notes.text),
         });
@@ -99,6 +107,10 @@ class _CustomerFormState extends ConsumerState<_CustomerForm> {
           'nid_number': _nid.text.trim(),
           'birth_date': _birth == null ? null : Fmt.iso(_birth!),
           'occupation': _occupation.text.trim(),
+          'workplace': _workplace.text.trim(),
+          'emergency_contact_name': _emergencyName.text.trim(),
+          'emergency_contact_phone': _emergencyPhone.text.trim(),
+          'reminders_enabled': _reminders,
           'customer_group': _group,
           'notes': _notes.text.trim(),
           'opening_balance': _openingIsAdvance ? -opening : opening,
@@ -164,6 +176,21 @@ class _CustomerFormState extends ConsumerState<_CustomerForm> {
           ]),
           DateField(label: 'Date of birth', value: _birth, allowClear: true, lastDate: DateTime.now(), firstDate: DateTime(1920), onChanged: (d) => setState(() => _birth = d)),
           AppTextField(controller: _notes, label: 'Notes', maxLines: 3, hint: 'Special instructions'),
+        ]),
+        FormSection('Installment details', subtitle: 'Used when this customer buys on installment. Guarantors are added on each installment sale.', children: [
+          AppTextField(controller: _workplace, label: 'Workplace or business', hint: 'Employer, shop or institution'),
+          FieldRow([
+            AppTextField(controller: _emergencyName, label: 'Emergency contact name', textCapitalization: TextCapitalization.words),
+            AppTextField(controller: _emergencyPhone, label: 'Emergency contact number', keyboardType: TextInputType.phone, validator: Validators.optionalPhone),
+          ]),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Send installment reminders', style: TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: const Text('Turn off for customers who should not receive due date or overdue reminders.'),
+            value: _reminders,
+            onChanged: (v) => setState(() => _reminders = v),
+          ),
+          Text(_isEdit ? 'NID copies and agreements are added from the customer profile (Documents).' : 'After saving, open the customer profile to attach NID copies and other documents.', style: TextStyle(color: c.textMuted)),
         ]),
         if (!_isEdit)
           FormSection('Opening balance', subtitle: 'Use this when the customer already owes you, or has paid in advance, from before EZ POS.', children: [

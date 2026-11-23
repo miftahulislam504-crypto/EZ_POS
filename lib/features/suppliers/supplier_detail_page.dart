@@ -6,6 +6,7 @@ import '../../core/data/providers.dart';
 import '../../core/models/app_user.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format.dart';
+import '../../core/widgets/attachments_section.dart';
 import '../../core/widgets/buttons.dart';
 import '../../core/widgets/feedback.dart';
 import '../../core/widgets/layout.dart';
@@ -129,6 +130,15 @@ class SupplierDetailPage extends ConsumerWidget {
                                 InfoRow('Notes', s.notes ?? '-'),
                               ],
                             ),
+                          ),
+                          const SizedBox(height: 16),
+                          AttachmentsSection(
+                            entityType: 'supplier',
+                            entityId: s.id,
+                            title: 'Documents',
+                            subtitle: 'Bills, trade licence or agreements',
+                            canEdit: user.can(Perm.suppliersManage),
+                            canDelete: user.can(Perm.suppliersManage),
                           ),
                         ],
                       ),

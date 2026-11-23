@@ -276,3 +276,20 @@ Future<String?> reasonDialog(
     },
   );
 }
+
+
+/// Lets code without a BuildContext (printing, background sync) show a message.
+final GlobalKey<ScaffoldMessengerState> rootMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+void showGlobalToast(String message, {bool error = false}) {
+  final m = rootMessengerKey.currentState;
+  if (m == null) return;
+  m
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: error ? const Color(0xFFB91C1C) : null,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 5),
+    ));
+}

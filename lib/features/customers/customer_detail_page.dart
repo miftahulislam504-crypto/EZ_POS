@@ -6,10 +6,13 @@ import '../../core/data/providers.dart';
 import '../../core/models/app_user.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format.dart';
+import '../../core/widgets/attachments_section.dart';
 import '../../core/widgets/buttons.dart';
 import '../../core/widgets/feedback.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
+import '../installments/installments_data.dart';
+import '../installments/plan_card.dart';
 import '../pos/pos_controller.dart';
 import '../sales/sales_data.dart';
 import 'customers_data.dart';
@@ -31,8 +34,9 @@ class CustomerDetailPage extends ConsumerWidget {
       error: (e, _) => Scaffold(appBar: AppBar(), body: ErrorState(message: '$e', onRetry: () => ref.invalidate(customerProvider))),
       data: (c) {
         if (c == null) return Scaffold(appBar: AppBar(), body: const EmptyState(icon: Icons.search_off_rounded, title: 'Customer not found'));
+        final showPlans = user.can(Perm.installmentsView);
         return DefaultTabController(
-          length: 3,
+          length: showPlans ? 4 : 3,
           child: PageScaffold(
             title: c.name,
             subtitle: c.code,
@@ -41,7 +45,12 @@ class CustomerDetailPage extends ConsumerWidget {
               if (user.can(Perm.customersManage))
                 IconButton(icon: const Icon(Icons.edit_outlined), tooltip: 'Edit', onPressed: () => context.push('/customers/${c.id}/edit')),
             ],
-            bottom: const TabBar(isScrollable: true, tabs: [Tab(text: 'Ledger'), Tab(text: 'Invoices'), Tab(text: 'Details')]),
+            bottom: TabBar(isScrollable: true, tabs: [
+              const Tab(text: 'Ledger'),
+              const Tab(text: 'Invoices'),
+              if (showPlans) const Tab(text: 'Installments'),
+              const Tab(text: 'Details'),
+            ]),
             body: Column(
               children: [
                 _Header(customer: c, summary: summary),
@@ -50,6 +59,7 @@ class CustomerDetailPage extends ConsumerWidget {
                     children: [
                       _LedgerTab(customerId: c.id),
                       _InvoicesTab(customerId: c.id, summary: summary),
+                      if (showPlans) _PlansTab(customerId: c.id),
                       _DetailsTab(customer: c),
                     ],
                   ),
@@ -266,13 +276,58 @@ class _DetailsTab extends ConsumerWidget {
               InfoRow('Present address', customer.presentAddress ?? '-'),
               InfoRow('Permanent address', customer.permanentAddress ?? '-'),
               InfoRow('Occupation', customer.occupation ?? '-'),
+              InfoRow('Workplace', customer.workplace ?? '-'),
+              InfoRow('Emergency contact', [customer.emergencyName, customer.emergencyPhone].whereType<String>().where((e) => e.isNotEmpty).join('  |  ').isEmpty
+                  ? '-'
+                  : [customer.emergencyName, customer.emergencyPhone].whereType<String>().where((e) => e.isNotEmpty).join('  |  ')),
+              InfoRow('Installment reminders', customer.remindersEnabled ? 'On' : 'Off'),
               InfoRow('Date of birth', customer.birthDate == null ? '-' : Fmt.date(customer.birthDate)),
               if (user.can(Perm.customersManage)) InfoRow('NID number', customer.nid ?? '-'),
               InfoRow('Notes', customer.notes ?? '-'),
             ],
           ),
         ),
+        if (user.can(Perm.customersDocuments)) ...[
+          const SizedBox(height: 16),
+          AttachmentsSection(
+            entityType: 'customer',
+            entityId: customer.id,
+            title: 'Documents',
+            subtitle: 'NID copies, photo and other papers. Only people with document access can see these.',
+          ),
+        ],
       ],
+    );
+  }
+}
+
+class _PlansTab extends ConsumerWidget {
+  const _PlansTab({required this.customerId});
+
+  final String customerId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final value = ref.watch(installmentPlansProvider((status: 'all', search: '', customerId: customerId, limit: 100)));
+    return AsyncBody<List<InstallmentPlanRow>>(
+      value: value,
+      onRetry: () => ref.invalidate(installmentPlansProvider),
+      builder: (plans) {
+        if (plans.isEmpty) {
+          return const EmptyState(
+            icon: Icons.event_repeat_rounded,
+            title: 'No installment plans',
+            message: 'Plans appear here when this customer buys on installment.',
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+          children: [
+            for (final p in plans)
+              Padding(padding: const EdgeInsets.only(bottom: 10), child: PlanSummaryCard(plan: p, showCustomer: false)),
+          ],
+        );
+      },
     );
   }
 }
